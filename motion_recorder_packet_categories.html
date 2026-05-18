@@ -505,7 +505,9 @@ tr.summary-break td{padding-top:.85rem;background-image:linear-gradient(to right
       </div>
       <div class="command-app-links">
         <span class="command-app-links-label">사용 app 함수:</span>
+        <button type="button" class="command-app-link" onclick="openFunctionDoc('functions-app-set-host-date-time')">App_SetHostDateTime</button>
         <button type="button" class="command-app-link" onclick="openFunctionDoc('functions-app-ping')">App_Ping</button>
+        <button type="button" class="command-app-link" onclick="openFunctionDoc('functions-app-get-ping-status')">App_GetPingStatus</button>
       </div>
       <div class="function-sub">
         <span class="mono">CMD_PING</span>은 장치가 살아 있고 통신 가능 상태인지 확인하는 기본 명령입니다.
@@ -538,9 +540,10 @@ tr.summary-break td{padding-top:.85rem;background-image:linear-gradient(to right
           <h4>PONG payload 형식</h4>
           <ul>
             <li>성공 시 응답 cmd는 <span class="mono">CMD_PONG(0x02)</span> 입니다.</li>
-            <li>앱은 <span class="mono">payload_len = 10</span> 또는 <span class="mono">11</span>을 정상 PONG으로 처리합니다.</li>
-            <li>기본 payload 순서는 <span class="mono">state(1) | init_state(1) | current_ms(4 LE) | total_ms(4 LE)</span> 입니다.</li>
-            <li>11번째 바이트가 있으면 <span class="mono">power_status</span>로 해석하며, <span class="mono">0x01=ON</span>, 그 외는 <span class="mono">OFF</span> 입니다.</li>
+            <li>현재 펌웨어 송신 기준은 <span class="mono">payload_len = 11</span> 고정입니다.</li>
+            <li>payload 순서는 <span class="mono">state(1) | init_state(1) | current_ms(4 LE) | total_ms(4 LE) | power_status(1)</span> 입니다.</li>
+            <li><span class="mono">power_status</span>는 <span class="mono">0x01=ON</span>, 그 외는 <span class="mono">OFF</span> 로 해석합니다.</li>
+            <li>구버전 앱 호환이 필요하면 수신 앱에서만 <span class="mono">payload_len = 10</span> PONG을 별도 허용할 수 있습니다.</li>
             <li>실패 시에는 에러 응답으로 처리됩니다.</li>
           </ul>
         </div>
@@ -957,6 +960,55 @@ Setting/MT_RP.TXT = path
       </div>
 
       <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-set-host-date-time')">
+          <div class="command-linktitle">App_SetHostDateTime</div>
+          <div class="command-linkdesc"><span class="mono">CMD_PING</span> 12바이트 시간 payload 수신 시 호스트 시간을 반영합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-get-ping-status')">
+          <div class="command-linktitle">App_GetPingStatus</div>
+          <div class="command-linkdesc"><span class="mono">CMD_PONG</span> 11바이트 상태 payload에 들어갈 snapshot을 제공합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-move')">
+          <div class="command-linktitle">App_Move</div>
+          <div class="command-linkdesc"><span class="mono">CMD_MOVE</span> 수신 시 단일 모터 raw 위치 이동을 수행합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-power-control')">
+          <div class="command-linktitle">App_PowerControl</div>
+          <div class="command-linkdesc"><span class="mono">CMD_POWER_CTRL</span> 수신 시 OFF / ON / REBOOT 동작을 수행합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-get-motors')">
+          <div class="command-linktitle">App_GetMotors</div>
+          <div class="command-linkdesc"><span class="mono">CMD_GET_MOTORS</span> 응답에 들어갈 전체 모터 구성을 제공합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-get-motor-state')">
+          <div class="command-linktitle">App_GetMotorState</div>
+          <div class="command-linkdesc"><span class="mono">CMD_GET_MOTOR_STATE</span> 응답에 들어갈 runtime 상태를 제공합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
+        <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-get-files')">
+          <div class="command-linktitle">App_GetFiles</div>
+          <div class="command-linkdesc"><span class="mono">CMD_GET_FILES</span> 응답에 들어갈 파일/폴더 트리를 제공합니다.</div>
+        </button>
+      </div>
+
+      <div class="command-linkcard">
         <button type="button" class="command-linkbtn" onclick="openFunctionDoc('functions-app-get-file')">
           <div class="command-linktitle">App_GetFile</div>
           <div class="command-linkdesc">설정 / Midi / 로그 파일 읽기 공통 진입점입니다.</div>
@@ -1269,7 +1321,8 @@ bool App_MotionPlay(uint8_t device_id)
       </div>
       <div class="function-sub">
         <span class="mono">CMD_PING</span> 이 들어오면 통신 레이어가 <span class="mono">App_Ping()</span> 을 호출합니다.
-        이 함수는 장치가 현재 응답 가능한 상태인지 판단하는 가장 얇은 app 진입점입니다.
+        이 함수는 장치가 현재 응답 가능한 상태인지 판단하는 가장 얇은 app 진입점이며,
+        실제 PONG 상태값은 <span class="mono">App_GetPingStatus()</span> 가 제공합니다.
       </div>
 
       <div class="function-grid">
@@ -1277,7 +1330,8 @@ bool App_MotionPlay(uint8_t device_id)
           <h4>언제 호출되는가</h4>
           <ul>
             <li>PC가 <span class="mono">CMD_PING</span> 을 보내면 호출됩니다.</li>
-            <li>현재 구현에서는 입력 payload가 없으므로 함수 인자도 없습니다.</li>
+            <li>요청 payload가 12바이트 시간 동기화 형식이면 통신 레이어가 먼저 <span class="mono">App_SetHostDateTime()</span> 을 호출합니다.</li>
+            <li>그 다음 장치 liveness 확인용으로 <span class="mono">App_Ping()</span> 을 호출합니다.</li>
             <li>대표 대응 항목은 <strong>장치 발견 / Ping</strong> 입니다.</li>
           </ul>
         </div>
@@ -1296,7 +1350,7 @@ bool App_MotionPlay(uint8_t device_id)
           <ul>
             <li>true 반환 시 통신 레이어가 <span class="mono">CMD_PONG</span> 성공 응답을 보냅니다.</li>
             <li>false 반환 시 에러 응답으로 처리됩니다.</li>
-            <li>현재 구현에서 PONG payload 안에 <span class="mono">state / init_state / current_ms / total_ms</span> 가 담깁니다.</li>
+            <li>현재 구현에서 PONG payload 안에 <span class="mono">state / init_state / current_ms / total_ms / power_status</span> 가 담깁니다.</li>
           </ul>
         </div>
 
@@ -1315,45 +1369,258 @@ bool App_MotionPlay(uint8_t device_id)
 bool ok = App_Ping();
 if (ok) {
     AppPingStatus ping_status;
-    uint8_t payload[10];
+    uint8_t payload[11];
 
     if (App_GetPingStatus(&ping_status)) {
         WritePingStatusPayload(payload, &ping_status);
-        SendBinaryResponse(ctx, src_id, (uint8_t)CMD_PONG, STATUS_OK, payload, 10u);
+        SendBinaryResponse(ctx, src_id, (uint8_t)CMD_PONG, STATUS_OK, payload, 11u);
     }
 }</code></pre>
           <pre><code>/* 현재 구현의 PONG payload 예시 */
 payload[0] = 0x01;        /* state = 재생중 */
 payload[1] = 0x00;        /* init_state = reserved */
 payload[2..5] = 800 ms;   /* current_ms, uint32 LE */
-payload[6..9] = 5000 ms;  /* total_ms, uint32 LE */</code></pre>
+payload[6..9] = 5000 ms;  /* total_ms, uint32 LE */
+payload[10] = 0x01;       /* power_status = ON */</code></pre>
           <pre><code>/* app 레이어 최대 구현 예시 */
 bool App_Ping(void)
 {
-    MotionStatus status;
-    InitStage init_stage;
-    uint32_t current_ms;
-    uint32_t total_ms;
+    /* 장치가 지금 통신 응답 가능한 상태인지 확인 */
+    return Device_IsCommunicationReady();
+}</code></pre>
+        </div>
+      </div>
+    </section>
 
-    /* 1) 현재 모션 상태 수집: 정지/재생중/초기화 중/초기화 완료/에러 */
-    status = Motion_GetStatus();
+    <section class="function-card" id="functions-app-set-host-date-time">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-ping-detail')">called by CMD_PING</button>
+        <span class="function-title">App_SetHostDateTime(const AppHostDateTime *host_time)</span>
+      </div>
+      <div class="function-sub">
+        <span class="mono">CMD_PING</span> 요청 payload가 12바이트 시간 동기화 형식이면 통신 레이어가 payload를 검증/파싱한 뒤 이 함수를 호출합니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>입력 데이터</h4>
+          <ul>
+            <li><span class="mono">country_code[2]</span>, <span class="mono">year</span>, <span class="mono">month</span>, <span class="mono">day</span>, <span class="mono">hour</span>, <span class="mono">minute</span>, <span class="mono">second</span>, <span class="mono">utc_offset_min</span> 입니다.</li>
+            <li>payload format byte는 현재 <span class="mono">0x01</span> 만 유효합니다.</li>
+            <li>날짜/시간 범위와 국가 코드 문자는 통신 레이어에서 먼저 검증합니다.</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>app 코드가 해야 할 일</h4>
+          <ul>
+            <li>필요하면 RTC, 로그 기준 시간, 파일 timestamp 기준 시간을 갱신합니다.</li>
+            <li>시간 반영에 성공하면 true, 반영할 수 없으면 false를 반환합니다.</li>
+            <li>false 반환 시 <span class="mono">CMD_PONG</span> 에 대한 <span class="mono">ERR_INVALID_PARAM</span> 에러 응답이 전송됩니다.</li>
+          </ul>
+        </div>
+        <div class="function-block function-block-wide">
+          <h4>레퍼런스 코드 조각</h4>
+          <pre><code>if (payload_len != 0u) {
+    AppHostDateTime host_time;
+    if (!ParsePingHostDateTime(payload, payload_len, &amp;host_time)) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_PONG, ERR_INVALID_INPUT, NULL);
+        return;
+    }
+    if (!App_SetHostDateTime(&amp;host_time)) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_PONG, ERR_INVALID_PARAM, NULL);
+        return;
+    }
+}</code></pre>
+        </div>
+      </div>
+    </section>
 
-    /* 2) 초기화 단계 수집: 세부 값 정의는 추후 문서화 예정 */
-    init_stage = Motion_GetInitStage();
+    <section class="function-card" id="functions-app-get-ping-status">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-ping-detail')">called by CMD_PING</button>
+        <span class="function-title">App_GetPingStatus(AppPingStatus *out_status)</span>
+      </div>
+      <div class="function-sub">
+        <span class="mono">App_Ping()</span> 이 true를 반환하면 통신 레이어가 이 함수를 호출해 <span class="mono">CMD_PONG</span> 11바이트 payload에 들어갈 상태 snapshot을 가져옵니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>출력 필드</h4>
+          <ul>
+            <li><span class="mono">state</span>: 0x00 정지, 0x01 재생중, 0x02 초기화 중, 0x03 초기화 완료, 0x04 에러</li>
+            <li><span class="mono">init_state</span>: 초기화 단계 코드용 1바이트 예약 필드</li>
+            <li><span class="mono">current_ms</span>, <span class="mono">total_ms</span>: 모션 시간, uint32 little-endian으로 직렬화</li>
+            <li><span class="mono">power_status</span>: 0x01 ON, 그 외 OFF</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>app 코드가 해야 할 일</h4>
+          <ul>
+            <li>현재 모션 상태, 초기화 단계, 진행 시간, 전체 시간, 전원 상태를 최신값으로 채웁니다.</li>
+            <li>통신 프레임이나 byte order는 app 코드에서 직접 만들지 않습니다.</li>
+            <li>snapshot을 만들 수 있으면 true, 만들 수 없으면 false를 반환합니다.</li>
+          </ul>
+        </div>
+        <div class="function-block function-block-wide">
+          <h4>app 레이어 구현 예시</h4>
+          <pre><code>bool App_GetPingStatus(AppPingStatus *out_status)
+{
+    if (out_status == NULL) {
+        return false;
+    }
 
-    /* 3) 진행 시간과 전체 시간 수집: 단위는 ms */
-    current_ms = Motion_GetCurrentTimeMs();
-    total_ms = Motion_GetTotalTimeMs();
-
-    /* 4) 통신 레이어가 CMD_PONG payload를 채울 수 있도록 최신 상태를 반영 */
-    g_ping_snapshot.state = (uint8_t)status;
-    g_ping_snapshot.init_state = (uint8_t)init_stage;
-    g_ping_snapshot.current_ms = current_ms;
-    g_ping_snapshot.total_ms = total_ms;
-
-    /* 5) 지금 응답 가능한 상태면 true 반환 */
+    out_status->state = Motion_GetPingState();
+    out_status->init_state = Motion_GetInitStage();
+    out_status->current_ms = Motion_GetCurrentTimeMs();
+    out_status->total_ms = Motion_GetTotalTimeMs();
+    out_status->power_status = Power_IsOn() ? 0x01u : 0x00u;
     return true;
 }</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="function-card" id="functions-app-move">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-move-detail')">called by CMD_MOVE</button>
+        <span class="function-title">App_Move(uint8_t motor_id, int32_t raw_pos)</span>
+      </div>
+      <div class="function-sub">
+        <span class="mono">CMD_MOVE</span> payload의 <span class="mono">motor_id(1) | pos_raw(2 LE)</span> 를 통신 레이어가 복원한 뒤 호출합니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>app 코드가 해야 할 일</h4>
+          <ul>
+            <li><span class="mono">motor_id</span> 가 실제 제어 가능한 모터인지 확인합니다.</li>
+            <li><span class="mono">raw_pos</span> 가 해당 모터의 허용 raw 범위 안에 있는지 확인합니다.</li>
+            <li>이동 명령을 접수했으면 true, 모터 없음/범위 오류/제어 실패면 false를 반환합니다.</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>응답 의미</h4>
+          <ul>
+            <li>true 반환 시 <span class="mono">device_id(1) | motor_id(1)</span> 성공 payload가 전송됩니다.</li>
+            <li>false 반환 시 현재 통신 레이어는 <span class="mono">ERR_MOTOR_NOT_FOUND</span> 를 전송합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="function-card" id="functions-app-power-control">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-power-ctrl-detail')">called by CMD_POWER_CTRL</button>
+        <span class="function-title">App_PowerControl(uint8_t action)</span>
+      </div>
+      <div class="function-sub">
+        <span class="mono">CMD_POWER_CTRL</span> payload의 1바이트 action을 받아 전원 릴레이 OFF / ON / REBOOT 동작에 연결합니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>action 값</h4>
+          <ul>
+            <li><span class="mono">0x00 = POWER_ACTION_OFF</span></li>
+            <li><span class="mono">0x01 = POWER_ACTION_ON</span></li>
+            <li><span class="mono">0x02 = POWER_ACTION_REBOOT</span></li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>app 코드가 해야 할 일</h4>
+          <ul>
+            <li>릴레이 GPIO 또는 전원 제어 회로를 실제 action에 맞게 구동합니다.</li>
+            <li>REBOOT는 OFF 후 지연을 두고 ON으로 복귀하는 정책을 구현합니다.</li>
+            <li>다음 <span class="mono">CMD_PONG</span> 에 반영되도록 power 상태 snapshot도 갱신합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="function-card" id="functions-app-get-motors">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-get-motors-detail')">called by CMD_GET_MOTORS</button>
+        <span class="function-title">App_GetMotors(AppMotorInfo *out_motors, uint16_t max_count)</span>
+      </div>
+      <div class="function-sub">
+        전체 모터 구성과 현재 상태를 배열로 채워 초기 로딩용 <span class="mono">CMD_GET_MOTORS</span> 응답을 만듭니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>채워야 하는 필드</h4>
+          <ul>
+            <li><span class="mono">id, group_id, sub_id, type, status</span></li>
+            <li><span class="mono">position, velocity, min_angle, max_angle, min_raw, max_raw</span></li>
+            <li>반환 개수는 <span class="mono">0..max_count</span> 범위여야 합니다.</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>반환 규칙</h4>
+          <ul>
+            <li>성공하면 채운 모터 개수를 반환합니다.</li>
+            <li>실패하면 음수를 반환합니다.</li>
+            <li><span class="mono">max_count</span> 를 초과한 개수를 반환하면 통신 레이어가 <span class="mono">ERR_INVALID_PARAM</span> 으로 처리합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="function-card" id="functions-app-get-motor-state">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-get-motor-state-detail')">called by CMD_GET_MOTOR_STATE</button>
+        <span class="function-title">App_GetMotorState(AppMotorState *out_states, uint16_t max_count)</span>
+      </div>
+      <div class="function-sub">
+        모터 구성은 유지한 채 주기 갱신에 필요한 runtime 상태만 반환합니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>채워야 하는 필드</h4>
+          <ul>
+            <li><span class="mono">id</span>: 기존 모터 목록과 매칭할 모터 ID</li>
+            <li><span class="mono">status</span>: 정상/에러/과부하/연결 끊김 등 runtime 상태</li>
+            <li><span class="mono">position</span>, <span class="mono">velocity</span>: 현재 raw 위치와 속도</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>반환 규칙</h4>
+          <ul>
+            <li>성공하면 채운 상태 개수를 반환합니다.</li>
+            <li>실패하면 음수를 반환합니다.</li>
+            <li>응답 entry는 통신 레이어에서 <span class="mono">id | position(2 LE) | velocity(2 LE) | status</span> 로 직렬화합니다.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="function-card" id="functions-app-get-files">
+      <div class="function-head">
+        <span class="badge b-cmd">App 함수</span>
+        <button type="button" class="badge badge-link b-rw" onclick="openCommandDoc('commands-get-files-detail')">called by CMD_GET_FILES</button>
+        <span class="function-title">App_GetFiles(AppFileInfo *out_files, uint16_t max_count)</span>
+      </div>
+      <div class="function-sub">
+        파일/폴더 목록을 tree 구조로 채워 <span class="mono">CMD_GET_FILES</span> 응답에 제공합니다.
+      </div>
+      <div class="function-grid">
+        <div class="function-block">
+          <h4>채워야 하는 필드</h4>
+          <ul>
+            <li><span class="mono">name</span>, <span class="mono">path</span>, <span class="mono">is_directory</span>, <span class="mono">size</span></li>
+            <li><span class="mono">depth</span>, <span class="mono">parent_index</span> 로 tree 관계를 표현합니다.</li>
+            <li>부모 폴더는 자식 항목보다 앞에 위치해야 합니다.</li>
+          </ul>
+        </div>
+        <div class="function-block">
+          <h4>반환 규칙</h4>
+          <ul>
+            <li>성공하면 채운 entry 개수를 반환합니다.</li>
+            <li>실패하면 음수를 반환합니다.</li>
+            <li>응답이 4096바이트 TX buffer를 넘으면 통신 레이어가 <span class="mono">ERR_RESPONSE_TOO_LARGE</span> 를 전송합니다.</li>
+          </ul>
         </div>
       </div>
     </section>
