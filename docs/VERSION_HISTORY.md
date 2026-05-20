@@ -11,6 +11,113 @@ App 레이어 계약, 구현 위치, 검증 방법을 누적 기록합니다.
 - 멀티바이트 값은 little-endian 여부를 명확히 적습니다.
 - mock/weak 구현을 함께 갱신해야 하는 경우 반드시 구현 위치에 남깁니다.
 
+## SW v1.1.10.0 - 2026-05-20
+
+### 요약
+
+binary serial protocol에 운영시간 schedule 저장/조회 명령을 추가했습니다.
+
+Host UI는 `CMD_SET_OPERATE_TIME`으로 7일 전체 schedule을 저장하고,
+`CMD_GET_OPERATE_TIME`으로 저장된 schedule을 다시 읽어 같은
+`schedule_checksum`으로 검증합니다.
+
+### Protocol
+
+- `CMD_SET_OPERATE_TIME = 0x30`
+- `CMD_GET_OPERATE_TIME = 0x31`
+
+#### SET_OPERATE_TIME Request Payload
+
+Payload 길이는 고정 43 bytes입니다.
+
+```text
+format_version(1)
+timezone_offset_min(2 LE, int16)
+schedule_checksum(4 LE, uint32)
+day_count(1)
+rows[7]
+```
+
+각 row는 5 bytes입니다.
+
+```text
+day_of_week(1) | open_minutes(2 LE) | close_minutes(2 LE)
+```
+
+Field 규칙:
+
+- `format_version`은 반드시 `1`이어야 합니다.
+- `day_count`는 반드시 `7`이어야 합니다.
+- `day_of_week`는 반드시 `1..7` 범위여야 합니다.
+- `open_minutes == 0 && close_minutes == 0`이면 휴무로 처리합니다.
+- `is_closed` field는 없습니다.
+- `00:00 ~ 00:00`은 24시간 영업이 아니라 휴무입니다.
+
+#### SET_OPERATE_TIME Success Response
+
+Payload 길이는 4 bytes입니다.
+
+```text
+schedule_checksum(4 LE)
+```
+
+장치는 request offset `3..6`에 들어 있던 저장 schedule checksum을 그대로
+echo합니다.
+
+#### GET_OPERATE_TIME Request Payload
+
+Payload 길이는 반드시 0이어야 합니다.
+
+#### GET_OPERATE_TIME Success Response
+
+Payload 길이는 43 bytes이며 `SET_OPERATE_TIME` request payload와 같은
+layout을 사용합니다. 장치는 마지막으로 정상 저장된 payload를 저장된 그대로
+반환합니다.
+
+저장된 schedule이 없으면 `CMD_ERROR`를 반환합니다.
+
+### 검증 및 Error 처리
+
+communication layer는 아래 조건을 거부합니다.
+
+- SET payload 길이가 43 bytes가 아님
+- `format_version != 1`
+- `day_count != 7`
+- `day_of_week`가 `1..7` 범위를 벗어남
+- app-layer 저장 실패
+- GET payload 길이가 0이 아님
+- GET 시 저장된 schedule이 없음
+
+### App Layer Contract
+
+`device_hal.h`는 아래 contract를 제공합니다.
+
+- `APP_OPERATE_TIME_PAYLOAD_SIZE = 43`
+- `AppOperateTimeRow`
+- `AppOperateTimeSchedule`
+- `App_SetOperateTime(const uint8_t *payload, uint16_t payload_len)`
+- `App_GetOperateTime(uint8_t *out_payload, uint16_t max_len, uint16_t *out_len)`
+
+raw 43-byte payload는 storage와 GET response의 기준 format으로 유지합니다.
+파싱된 `AppOperateTimeSchedule` struct는 명시적인 little-endian parsing 이후
+application-side logic에서 사용하기 위한 구조입니다.
+
+### 구현 Notes
+
+- `Src/binary_com.c`는 wire payload를 검증하고 SET/GET dispatch를 처리합니다.
+- 현재 mock 동작은 마지막 정상 43-byte payload를 RAM에 저장합니다.
+- mock app은 payload를 `AppOperateTimeSchedule`로도 파싱합니다.
+- real-device weak stub은 application에서 SD 또는 비휘발 저장소 구현을 붙이기
+  전까지 failure를 반환합니다.
+
+### 변경 파일
+
+| File | Change |
+|---|---|
+| `Inc/binary_com.h` | operate-time command ID 추가 |
+| `Inc/device_hal.h` | payload size, parsed schedule struct, app storage API 추가 |
+| `Src/binary_com.c` | validation, SET response checksum echo, GET response payload 추가 |
+
 ## SW v1.1.8.0 - 2026-05-13
 
 ### Summary

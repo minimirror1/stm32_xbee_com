@@ -1,19 +1,22 @@
 # STM32 Binary Communication Library
-# >버전 : v1.1.7.1 - 2026-05-12
+
+# >버전 : v1.1.10.0 - 2026-05-20
 
 XBee DigiMesh 기반 바이너리 통신 라이브러리입니다.  
 Fragment Protocol을 사용해 대용량 메시지를 분할 전송합니다.
 
 ## 지원 MCU
 
-| 시리즈 | 정의 매크로 | 상태 |
-|--------|-------------|------|
+
+| 시리즈     | 정의 매크로    | 상태        |
+| ------- | --------- | --------- |
 | STM32F3 | `STM32F3` | Supported |
 | STM32F4 | `STM32F4` | Supported |
 | STM32F7 | `STM32F7` | Supported |
 | STM32H7 | `STM32H7` | Supported |
 | STM32G4 | `STM32G4` | Supported |
 | STM32L4 | `STM32L4` | Supported |
+
 
 ## 폴더 구조
 
@@ -42,16 +45,19 @@ stm32_xbee_com/
 ### STM32CubeIDE
 
 1. Include Paths 추가
+
 - Project -> Properties -> C/C++ Build -> Settings
 - MCU GCC Compiler -> Include paths
 - 추가: `../Lib/stm32_xbee_com/Inc`
 
-2. Source Folders 추가
+1. Source Folders 추가
+
 - Project -> Properties -> C/C++ General -> Paths and Symbols
 - Source Location -> Add Folder
 - 추가: `Lib/stm32_xbee_com/Src`
 
-3. MCU 시리즈 정의 확인
+1. MCU 시리즈 정의 확인
+
 - Project -> Properties -> C/C++ Build -> Settings
 - MCU GCC Compiler -> Preprocessor
 - `STM32F7` 또는 해당 시리즈 매크로 정의 확인
@@ -109,3 +115,4 @@ git submodule add <repository_url> Lib/stm32_xbee_com
 git clone --recursive <project_url>
 git submodule update --init --recursive
 ```
+
