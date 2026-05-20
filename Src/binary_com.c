@@ -51,6 +51,10 @@ static void HandleSaveFile(BinaryContext *ctx, uint8_t src_id,
                            const uint8_t *payload, uint16_t payload_len);
 static void HandleVerifyFile(BinaryContext *ctx, uint8_t src_id,
                              const uint8_t *payload, uint16_t payload_len);
+static void HandleSetOperateTime(BinaryContext *ctx, uint8_t src_id,
+                                 const uint8_t *payload, uint16_t payload_len);
+static void HandleGetOperateTime(BinaryContext *ctx, uint8_t src_id,
+                                 const uint8_t *payload, uint16_t payload_len);
 
 /* XBee / Fragment callbacks */
 static void OnXBeeFrame(const XBeeFrame_t *frame, void *user_data);
@@ -80,6 +84,9 @@ typedef enum {
 #define BIN_PONG_PAYLOAD_SIZE              11u
 #define BIN_PING_TIME_FMT_LOCAL_TIME_V1   0x01u
 #define BIN_PING_TIME_PAYLOAD_SIZE        12u
+#define BIN_OPERATE_TIME_PAYLOAD_SIZE     APP_OPERATE_TIME_PAYLOAD_SIZE
+#define BIN_OPERATE_TIME_FORMAT_VERSION   1u
+#define BIN_OPERATE_TIME_DAY_COUNT        7u
 
 /* ============================================================================
  * Little-Endian Helpers
@@ -137,6 +144,7 @@ static void SendErrorResponse(BinaryContext *ctx,
 static uint8_t *WritePingStatusPayload(uint8_t *p, const AppPingStatus *status);
 static bool ParsePingHostDateTime(const uint8_t *payload, uint16_t payload_len,
                                   AppHostDateTime *out_host_time);
+static bool ValidateOperateTimePayload(const uint8_t *payload, uint16_t payload_len);
 static void RecordTxBusyDrop(BinaryContext *ctx);
 static BinarySendStatus QueueResponseFrame(BinaryContext *ctx,
                                            uint8_t tar_id,
@@ -487,6 +495,28 @@ static bool ParsePingHostDateTime(const uint8_t *payload, uint16_t payload_len,
     return true;
 }
 
+static bool ValidateOperateTimePayload(const uint8_t *payload, uint16_t payload_len)
+{
+    if (payload == NULL || payload_len != BIN_OPERATE_TIME_PAYLOAD_SIZE) {
+        return false;
+    }
+    if (payload[0] != BIN_OPERATE_TIME_FORMAT_VERSION) {
+        return false;
+    }
+    if (payload[7] != BIN_OPERATE_TIME_DAY_COUNT) {
+        return false;
+    }
+
+    for (uint8_t i = 0u; i < BIN_OPERATE_TIME_DAY_COUNT; i++) {
+        uint8_t day_of_week = payload[8u + ((uint16_t)i * 5u)];
+        if (day_of_week < 1u || day_of_week > 7u) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /* ============================================================================
  * Command Handlers
  * ============================================================================ */
@@ -637,6 +667,58 @@ static void HandlePowerCtrl(BinaryContext *ctx, uint8_t src_id,
     BinarySendStatus send_status =
         SendBinaryResponse(ctx, src_id, (uint8_t)CMD_POWER_CTRL, BIN_STATUS_OK, resp, 2u);
     SendErrorForStatus(ctx, src_id, (uint8_t)CMD_POWER_CTRL, send_status);
+}
+
+static void HandleSetOperateTime(BinaryContext *ctx, uint8_t src_id,
+                                 const uint8_t *payload, uint16_t payload_len)
+{
+    if (!ValidateOperateTimePayload(payload, payload_len)) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_SET_OPERATE_TIME,
+                          ERR_INVALID_INPUT, NULL);
+        return;
+    }
+
+    if (!App_SetOperateTime(payload, payload_len)) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_SET_OPERATE_TIME,
+                          ERR_UNKNOWN, NULL);
+        return;
+    }
+
+    uint32_t schedule_checksum = read_u32le(payload + 3u);
+    uint8_t resp[4];
+    (void)write_u32le(resp, schedule_checksum);
+    BinarySendStatus send_status =
+        SendBinaryResponse(ctx, src_id, (uint8_t)CMD_SET_OPERATE_TIME,
+                           BIN_STATUS_OK, resp, 4u);
+    SendErrorForStatus(ctx, src_id, (uint8_t)CMD_SET_OPERATE_TIME, send_status);
+}
+
+static void HandleGetOperateTime(BinaryContext *ctx, uint8_t src_id,
+                                 const uint8_t *payload, uint16_t payload_len)
+{
+    uint8_t resp[BIN_OPERATE_TIME_PAYLOAD_SIZE];
+    uint16_t resp_len = 0u;
+
+    (void)payload;
+
+    if (payload_len != 0u) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_GET_OPERATE_TIME,
+                          ERR_INVALID_INPUT, NULL);
+        return;
+    }
+
+    if (!App_GetOperateTime(resp, BIN_OPERATE_TIME_PAYLOAD_SIZE, &resp_len) ||
+        resp_len != BIN_OPERATE_TIME_PAYLOAD_SIZE ||
+        !ValidateOperateTimePayload(resp, resp_len)) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_GET_OPERATE_TIME,
+                          ERR_UNKNOWN, NULL);
+        return;
+    }
+
+    BinarySendStatus send_status =
+        SendBinaryResponse(ctx, src_id, (uint8_t)CMD_GET_OPERATE_TIME,
+                           BIN_STATUS_OK, resp, resp_len);
+    SendErrorForStatus(ctx, src_id, (uint8_t)CMD_GET_OPERATE_TIME, send_status);
 }
 
 static void HandleGetMotors(BinaryContext *ctx, uint8_t src_id)
@@ -1079,6 +1161,14 @@ static void HandleBinaryPacket(BinaryContext *ctx, const uint8_t *data, uint32_t
 
         case CMD_VERIFY_FILE:
             HandleVerifyFile(ctx, hdr.src_id, payload, hdr.payload_len);
+            break;
+
+        case CMD_SET_OPERATE_TIME:
+            HandleSetOperateTime(ctx, hdr.src_id, payload, hdr.payload_len);
+            break;
+
+        case CMD_GET_OPERATE_TIME:
+            HandleGetOperateTime(ctx, hdr.src_id, payload, hdr.payload_len);
             break;
 
         default:
