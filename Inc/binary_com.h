@@ -63,6 +63,8 @@ typedef enum {
     CMD_GET_FILE        = 0x21,
     CMD_SAVE_FILE       = 0x22,
     CMD_VERIFY_FILE     = 0x23,
+    CMD_SET_OPERATE_TIME = 0x30,
+    CMD_GET_OPERATE_TIME = 0x31,
     CMD_ERROR           = 0xFF
 } BinCmd;
 

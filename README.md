@@ -1,6 +1,6 @@
 # STM32 Binary Communication Library
 
-# >버전 : v1.1.8.0 - 2026-05-15
+# >버전 : v1.1.10.0 - 2026-05-20
 
 XBee DigiMesh 기반 바이너리 통신 라이브러리입니다.  
 Fragment Protocol을 사용해 대용량 메시지를 분할 전송합니다.

@@ -33,6 +33,7 @@
 #define APP_MAX_FILES         64    /* Maximum files returned by App_GetFiles */
 #define APP_MAX_DEPTH         10    /* Maximum folder depth (0=root, 1, 2, ... 9) */
 #define APP_MAX_MOTORS        32    /* Maximum motors */
+#define APP_OPERATE_TIME_PAYLOAD_SIZE 43u
 
 /*******************************************************************************
  * Motor Enums (Binary Protocol v1.0)
@@ -146,6 +147,29 @@ typedef struct {
     uint32_t total_ms;                    /* Total motion time in milliseconds */
     uint8_t power_status;                 /* 0x01 = ON, 0x00 = OFF */
 } AppPingStatus;
+
+/**
+ * @brief Parsed operate-time row for one day.
+ *
+ * The wire payload remains the canonical storage/GET response format. This
+ * struct is for application-side logic after explicit little-endian parsing.
+ */
+typedef struct {
+    uint8_t day_of_week;                  /* 1=MON ... 7=SUN */
+    uint16_t open_minutes;                /* Minutes since 00:00 */
+    uint16_t close_minutes;               /* Minutes since 00:00; 0/0 means closed */
+} AppOperateTimeRow;
+
+/**
+ * @brief Parsed operate-time schedule.
+ */
+typedef struct {
+    uint8_t format_version;               /* Must be 1 */
+    int16_t timezone_offset_min;          /* Local offset from UTC in minutes */
+    uint32_t schedule_checksum;           /* Host-provided checksum */
+    uint8_t day_count;                    /* Must be 7 */
+    AppOperateTimeRow rows[7];            /* Monday through Sunday rows */
+} AppOperateTimeSchedule;
 
 /**
  * @brief Host local date/time delivered in CMD_PING payload format 1
@@ -337,6 +361,23 @@ bool App_SaveFile(const char *path, const char *content);
  *   }
  */
 bool App_VerifyFile(const char *path, const char *content, bool *out_match);
+
+/**
+ * @brief Store the validated operate-time payload exactly as received.
+ * @param payload 43-byte payload from CMD_SET_OPERATE_TIME
+ * @param payload_len Must be APP_OPERATE_TIME_PAYLOAD_SIZE
+ * @return true on success, false on storage failure
+ */
+bool App_SetOperateTime(const uint8_t *payload, uint16_t payload_len);
+
+/**
+ * @brief Read the last successfully stored operate-time payload.
+ * @param out_payload Output buffer
+ * @param max_len Output buffer size
+ * @param out_len Number of bytes written on success
+ * @return true when a stored schedule exists and was copied, false otherwise
+ */
+bool App_GetOperateTime(uint8_t *out_payload, uint16_t max_len, uint16_t *out_len);
 
 /**
  * @brief Get list of all motors with full information
