@@ -599,6 +599,15 @@ static void HandleMotionCtrl(BinaryContext *ctx, uint8_t src_id,
             ok = App_MotionPlay(ctx->my_id);
             break;
 
+        case MOTION_ACTION_REPEAT_PLAY:
+            if (payload_len != 1u) {
+                SendErrorResponse(ctx, src_id, (uint8_t)CMD_MOTION_CTRL,
+                                  ERR_INVALID_INPUT, NULL);
+                return;
+            }
+            ok = App_MotionRepeatPlay(ctx->my_id);
+            break;
+
         case MOTION_ACTION_STOP:
             ok = App_MotionStop(ctx->my_id);
             break;
