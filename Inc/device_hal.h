@@ -268,6 +268,13 @@ bool App_Move(uint8_t motor_id, int32_t raw_pos);
 bool App_MotionPlay(uint8_t device_id);
 
 /**
+ * @brief Play motion sequence repeatedly from the beginning after it ends
+ * @param device_id Target device ID
+ * @return true on success, false on failure
+ */
+bool App_MotionRepeatPlay(uint8_t device_id);
+
+/**
  * @brief Stop motion sequence
  * @param device_id Target device ID
  * @return true on success, false on failure

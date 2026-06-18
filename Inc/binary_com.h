@@ -82,10 +82,11 @@ typedef enum {
  * ============================================================================ */
 
 typedef enum {
-    MOTION_ACTION_PLAY  = 0x00,
-    MOTION_ACTION_STOP  = 0x01,
-    MOTION_ACTION_PAUSE = 0x02,
-    MOTION_ACTION_SEEK  = 0x03
+    MOTION_ACTION_PLAY        = 0x00,
+    MOTION_ACTION_STOP        = 0x01,
+    MOTION_ACTION_PAUSE       = 0x02,
+    MOTION_ACTION_SEEK        = 0x03,
+    MOTION_ACTION_REPEAT_PLAY = 0x04
 } MotionAction;
 
 /* ============================================================================
