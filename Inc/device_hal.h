@@ -138,7 +138,8 @@ typedef struct {
  * @brief Status snapshot for CMD_PONG payload
  *
  * Wire format:
- *   state(1) | init_state(1) | current_ms(4 LE) | total_ms(4 LE) | power_status(1)
+ *   state(1) | init_state(1) | current_ms(4 LE) | total_ms(4 LE) |
+ *   power_status(1) | error_status(1)
  */
 typedef struct {
     AppPingState state;                   /* Device state for PONG payload */
@@ -146,6 +147,7 @@ typedef struct {
     uint32_t current_ms;                  /* Current motion time in milliseconds */
     uint32_t total_ms;                    /* Total motion time in milliseconds */
     uint8_t power_status;                 /* 0x01 = ON, 0x00 = OFF */
+    uint8_t error_status;                 /* 0x01 = error present, 0x00 = normal */
 } AppPingStatus;
 
 /**
@@ -302,6 +304,12 @@ bool App_MotionSeek(uint8_t device_id, uint32_t time_ms);
  * @return true on accepted/executed action, false on invalid or failed action
  */
 bool App_PowerControl(uint8_t action);
+
+/**
+ * @brief Clear current device error latch/status when possible
+ * @return true on success, false on failure
+ */
+bool App_ErrorClear(void);
 
 /**
  * @brief Get file/folder list from storage

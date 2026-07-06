@@ -57,6 +57,7 @@ typedef enum {
     CMD_MOVE            = 0x03,
     CMD_MOTION_CTRL     = 0x04,
     CMD_POWER_CTRL      = 0x05,
+    CMD_ERROR_CLEAR     = 0x06,
     CMD_GET_MOTORS      = 0x10,
     CMD_GET_MOTOR_STATE = 0x11,
     CMD_GET_FILES       = 0x20,

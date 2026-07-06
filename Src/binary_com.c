@@ -42,6 +42,8 @@ static void HandleMotionCtrl(BinaryContext *ctx, uint8_t src_id,
                               const uint8_t *payload, uint16_t payload_len);
 static void HandlePowerCtrl(BinaryContext *ctx, uint8_t src_id,
                             const uint8_t *payload, uint16_t payload_len);
+static void HandleErrorClear(BinaryContext *ctx, uint8_t src_id,
+                             const uint8_t *payload, uint16_t payload_len);
 static void HandleGetMotors(BinaryContext *ctx, uint8_t src_id);
 static void HandleGetMotorState(BinaryContext *ctx, uint8_t src_id);
 static void HandleGetFiles(BinaryContext *ctx, uint8_t src_id);
@@ -81,7 +83,7 @@ typedef enum {
     BIN_SEND_TX_BUSY
 } BinarySendStatus;
 
-#define BIN_PONG_PAYLOAD_SIZE              11u
+#define BIN_PONG_PAYLOAD_SIZE              12u
 #define BIN_PING_TIME_FMT_LOCAL_TIME_V1   0x01u
 #define BIN_PING_TIME_PAYLOAD_SIZE        12u
 #define BIN_OPERATE_TIME_PAYLOAD_SIZE     APP_OPERATE_TIME_PAYLOAD_SIZE
@@ -428,6 +430,7 @@ static uint8_t *WritePingStatusPayload(uint8_t *p, const AppPingStatus *status)
     p = write_u32le(p, status->current_ms);
     p = write_u32le(p, status->total_ms);
     p = write_u8(p, status->power_status);
+    p = write_u8(p, status->error_status);
     return p;
 }
 
@@ -676,6 +679,29 @@ static void HandlePowerCtrl(BinaryContext *ctx, uint8_t src_id,
     BinarySendStatus send_status =
         SendBinaryResponse(ctx, src_id, (uint8_t)CMD_POWER_CTRL, BIN_STATUS_OK, resp, 2u);
     SendErrorForStatus(ctx, src_id, (uint8_t)CMD_POWER_CTRL, send_status);
+}
+
+static void HandleErrorClear(BinaryContext *ctx, uint8_t src_id,
+                             const uint8_t *payload, uint16_t payload_len)
+{
+    (void)payload;
+
+    if (payload_len != 0u) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_ERROR_CLEAR,
+                          ERR_INVALID_INPUT, NULL);
+        return;
+    }
+
+    if (!App_ErrorClear()) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_ERROR_CLEAR,
+                          ERR_UNKNOWN, NULL);
+        return;
+    }
+
+    BinarySendStatus send_status =
+        SendBinaryResponse(ctx, src_id, (uint8_t)CMD_ERROR_CLEAR,
+                           BIN_STATUS_OK, NULL, 0u);
+    SendErrorForStatus(ctx, src_id, (uint8_t)CMD_ERROR_CLEAR, send_status);
 }
 
 static void HandleSetOperateTime(BinaryContext *ctx, uint8_t src_id,
@@ -1146,6 +1172,10 @@ static void HandleBinaryPacket(BinaryContext *ctx, const uint8_t *data, uint32_t
 
         case CMD_POWER_CTRL:
             HandlePowerCtrl(ctx, hdr.src_id, payload, hdr.payload_len);
+            break;
+
+        case CMD_ERROR_CLEAR:
+            HandleErrorClear(ctx, hdr.src_id, payload, hdr.payload_len);
             break;
 
         case CMD_GET_MOTORS:

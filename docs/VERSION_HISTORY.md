@@ -10,6 +10,31 @@ App 레이어 계약, 구현 위치, 검증 방법을 누적 기록합니다.
 - wire format은 `binary_com.h`와 실제 직렬화 코드 기준으로 기록합니다.
 - 멀티바이트 값은 little-endian 여부를 명확히 적습니다.
 - mock/weak 구현을 함께 갱신해야 하는 경우 반드시 구현 위치에 남깁니다.
+- 한글로 작성.
+
+## SW v1.1.12.0 - 2026-07-06
+
+### 요약
+
+`CMD_PONG` 응답 payload에 장치 에러 상태인 `error_status`를 항상 포함하도록
+변경했습니다. 또한 payload가 없는 `CMD_ERROR_CLEAR` 요청을 펌웨어에서
+처리합니다.
+
+### 프로토콜
+
+- `CMD_ERROR_CLEAR = 0x06`
+- `CMD_PONG` 성공 응답 payload 길이는 12 bytes로 고정입니다.
+- PONG payload:
+
+```text
+state(1) | init_state(1) | current_ms(4 LE) | total_ms(4 LE) | power_status(1) | error_status(1)
+```
+
+`error_status`는 `0x00`이면 정상, `0x01`이면 에러 있음입니다. Host
+소프트웨어는 0이 아닌 모든 값을 에러로 처리합니다.
+
+`CMD_ERROR_CLEAR` 요청 payload 길이는 반드시 `0`이어야 합니다. 성공 시 응답은
+`cmd = 0x06`, `status = 0x00`, `payload_len = 0`을 사용합니다.
 
 ## SW v1.1.10.0 - 2026-05-20
 
