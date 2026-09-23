@@ -953,6 +953,15 @@ static void HandleGetFile(BinaryContext *ctx, uint8_t src_id,
     memcpy(path_buf, payload + 2u, path_len);
     path_buf[path_len] = '\0';
 
+    /* Refuse rather than truncate: content plus NUL must fit the buffer.
+       A negative size means unknown (weak default) and skips the check. */
+    int32_t file_size = App_GetFileSize(path_buf);
+    if (file_size >= (int32_t)APP_CONTENT_MAX_LEN) {
+        SendErrorResponse(ctx, src_id, (uint8_t)CMD_GET_FILE,
+                          ERR_RESPONSE_TOO_LARGE, "File exceeds content buffer");
+        return;
+    }
+
     char *content_buf = g_binary_scratch.content;
     bool ok = App_GetFile(path_buf, content_buf, APP_CONTENT_MAX_LEN);
     if (!ok) {
