@@ -12,6 +12,110 @@ App 레이어 계약, 구현 위치, 검증 방법을 누적 기록합니다.
 - mock/weak 구현을 함께 갱신해야 하는 경우 반드시 구현 위치에 남깁니다.
 - 한글로 작성.
 
+## SW v1.1.17.0 - 2026-09-23
+
+### 요약
+
+파일 내용 송수신 한계를 512B → 2048B 로 확대했습니다(`APP_CONTENT_MAX_LEN`,
+NUL 포함이므로 실제 content 최대 2047 bytes). wire format 변경은 없습니다.
+
+또한 `CMD_GET_FILE` 이 버퍼보다 큰 파일을 조용히 잘라 `OK` 로 보내던 문제를 막기
+위해 `App_GetFileSize()` 를 추가했습니다. 크기가 버퍼에 들어가지 않으면
+잘린 내용 대신 `ERR_RESPONSE_TOO_LARGE` 를 보냅니다.
+
+### 프로토콜 변경
+
+없음. `content_len` 은 기존과 동일한 uint16 이며, 표현 가능 범위 안에서 실제
+전송 길이만 늘어났습니다. 명령 ID(`0x21`/`0x22`/`0x23`)와 payload layout 도
+그대로입니다.
+
+달라진 동작:
+
+- `CMD_GET_FILE`: content 최대 2047 bytes. `App_GetFileSize()` 가 2048 이상을
+  돌려주면 `CMD_ERROR` + `ERR_RESPONSE_TOO_LARGE(0x06)` 응답.
+- `CMD_SAVE_FILE` / `CMD_VERIFY_FILE`: `content_len >= 2048` 이면
+  `ERR_INVALID_PARAM(0x03)` (기존 검사, 경계만 512 → 2048).
+
+예시: 장치 ID 1, 2048 bytes 파일 읽기 요청에 대한 응답(35 bytes).
+
+```text
+01 00 FF 01 1D 00 | 06 1B "File exceeds content buffer"
+```
+
+앞 6 bytes는 응답 헤더(`cmd = 0xFF`, `status = 0x01`, `payload_len = 29`)이고,
+payload는 `error_code(1) | msg_len(1) | message(27)` 입니다.
+
+### App 레이어 계약
+
+- `App_GetFile(path, out_content, max_len)`: `max_len` 이 2048 으로 커집니다.
+  `out_content` 는 반드시 NUL 종료해야 하며, 파일이 `max_len` 이상이면 자르지
+  말고 false 를 반환합니다.
+- `App_GetFileSize(path)` (신규): SD 디렉터리 기준 실제 파일 크기를 반환합니다.
+  알 수 없으면 음수를 반환하고, 이때 통신 레이어는 크기 검사를 건너뜁니다.
+  weak 기본 구현은 `-1` 이므로 **오버라이드하기 전까지는 절단 보호가 꺼져
+  있습니다.** FatFs 라면 `f_stat()` 의 `FILINFO.fsize` 를 돌려주되, 2 GiB 이상은
+  `INT32_MAX` 로 고정합니다. 그대로 `int32_t` 로 바꾸면 음수("크기 미상")가 되어
+  검사를 건너뜁니다.
+- `App_GetFiles`: `AppFileInfo.size` 는 SD 디렉터리 기준 실제 파일 크기여야
+  합니다. 읽은 바이트 수나 버퍼 크기를 넣으면 PC 앱의 절단 감지가 무력화됩니다.
+- `App_VerifyFile`: 파일 크기가 버퍼 이상이거나 기대 content 길이와 다르면
+  비교하지 말고 `out_match = false`. 잘린 앞부분끼리의 거짓 일치를 막습니다.
+  2KB 버퍼는 스택 대신 `static` 으로 둡니다.
+
+### 구현 위치
+
+| 파일 | 변경 내용 |
+|---|---|
+| `Inc/device_hal.h` | `APP_CONTENT_MAX_LEN` 512 → 2048, `App_GetFileSize()` 선언, `App_GetFile`/`App_GetFiles`/`App_VerifyFile` 계약 주석과 예시 갱신 |
+| `Src/binary_com.c` | `HandleGetFile` 에서 `App_GetFile` 호출 전 `App_GetFileSize()` 로 크기 검사 |
+| `Core/Src/device_real.c` | weak `App_GetFileSize()` 추가(`-1` 반환) |
+| `Core/Src/device_mock.c` | `App_GetFileSize()` 추가: MT_ST 는 현재 내용 길이, 목록의 다른 파일은 목록 size, 디렉터리/미등록 경로는 `-1` |
+| `motion_recorder_packet_categories.html` | content 최대 511 → 2047, GET_FILE 처리 흐름과 `App_GetFile`/`App_VerifyFile` 레퍼런스 코드 갱신 |
+| `tests/file_content_2kb_contract_check.ps1` (메인 저장소) | 상한, 프레임 한계, `App_GetFileSize` 계약 검사 |
+
+### 수정할 때 지켜야 할 점
+
+- `g_binary_scratch` 는 union 이고 `files[64]`(13,056B)가 크기를 결정하므로
+  content 버퍼 확대에 추가 RAM 이 들지 않습니다. 단 mock 빌드에서는
+  `g_mock_mt_st_content` 가 `APP_CONTENT_MAX_LEN` 크기라 `.bss` 가 1,536B 늘어납니다.
+- GET_FILE 응답 최악값 `6 + 2 + 127 + 2 + 2047 = 2184B`, SAVE_FILE 요청 최악값
+  `5 + 2 + 127 + 2 + 2047 = 2183B` 가 `BIN_TX_BUFFER_SIZE`/`FRAG_MAX_MESSAGE_SIZE`
+  (4096) 를 넘지 않아야 합니다. 이 방식의 상한은 `APP_CONTENT_MAX_LEN <= 3960` 입니다.
+- `App_GetFileSize()` 의 음수는 "에러"가 아니라 "크기 미상"입니다. 음수를 에러로
+  처리하면 오버라이드하지 않은 프로젝트에서 GET_FILE 이 전부 막힙니다.
+
+### 검증 방법
+
+메인 펌웨어 저장소 루트에서 아래 스크립트를 실행합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests\file_content_2kb_contract_check.ps1
+```
+
+이 스크립트는 소스 문자열 검사입니다. `HandleGetFile` 의 크기 검사 블록(조건,
+에러 코드, `return`)과 mock `App_GetFileSize` 구현을 직접 확인합니다.
+
+Debug 빌드(경고 0) 후 `g_binary_scratch` 크기 0x3300 유지를 확인했습니다.
+작업 중 `binary_com.c` 를 PC에서 컴파일한 임시 하네스(저장소에는 포함하지 않음)로
+2047B 읽기/쓰기/검증 OK, 2048B 읽기 `ERR_RESPONSE_TOO_LARGE`, 2048B 쓰기/검증
+`ERR_INVALID_PARAM`, 최악 경로 프레임 2184B 를 확인했습니다.
+
+실기 확인이 남은 항목: SD 카드의 2047/2048B 경계 파일 읽기, `Setting/MT_ST.TXT`
+왕복, 2184B 응답(약 73조각)의 전송 시간. 50조각을 넘으면 조각 간격이 30ms 라
+최소 약 2.2초가 걸립니다(PC 앱 대기 시간은 조각마다 다시 시작되므로 문제 없음).
+
+### 마이그레이션 노트
+
+| 조합 | 읽기 | 쓰기 |
+|---|---|---|
+| 구 펌웨어(512) + 신 앱(2047) | 511B 에서 잘림 → 앱이 감지하고 저장 차단 | 512B 이상은 `ERR_INVALID_PARAM`, 데이터 손상 없음 |
+| 신 펌웨어(2048) + 구 앱(511) | 2047B 까지 정상 수신 | 앱이 511B 로 스스로 제한 |
+| 신 펌웨어 + 신 앱 | 2047B 까지 정상 | 2047B 까지 정상 |
+
+어느 조합에서도 데이터가 손상되지 않으므로 업데이트 순서 제약은 없습니다.
+실제 장치 프로젝트는 `App_GetFileSize()` 를 오버라이드해야 2047B 초과 파일이
+`ERR_RESPONSE_TOO_LARGE` 로 보고됩니다.
+
 ## SW v1.1.12.0 - 2026-07-06
 
 ### 요약

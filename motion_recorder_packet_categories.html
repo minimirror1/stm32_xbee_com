@@ -258,7 +258,7 @@ tr.summary-break td{padding-top:.85rem;background-image:linear-gradient(to right
     Request cmds: <span class="mono">CMD_PING(0x01), CMD_MOVE(0x03), CMD_MOTION_CTRL(0x04), CMD_POWER_CTRL(0x05), CMD_ERROR_CLEAR(0x06), CMD_GET_MOTORS(0x10), CMD_GET_MOTOR_STATE(0x11), CMD_GET_FILES(0x20), CMD_GET_FILE(0x21), CMD_SAVE_FILE(0x22), CMD_VERIFY_FILE(0x23)</span><br>
     Response cmds decoded by the app: <span class="mono">CMD_PONG(0x02), CMD_MOVE(0x03), CMD_MOTION_CTRL(0x04), CMD_POWER_CTRL(0x05), CMD_ERROR_CLEAR(0x06), CMD_GET_MOTORS(0x10), CMD_GET_MOTOR_STATE(0x11), CMD_GET_FILES(0x20), CMD_GET_FILE(0x21), CMD_SAVE_FILE(0x22), CMD_VERIFY_FILE(0x23), CMD_ERROR(0xFF)</span><br>
     Error codes decoded by the app: <span class="mono">UNKNOWN(0x00), INVALID_INPUT(0x01), UNKNOWN_CMD(0x02), INVALID_PARAM(0x03), FILE_NOT_FOUND(0x04), MOTOR_NOT_FOUND(0x05), RESPONSE_TOO_LARGE(0x06), TX_BUSY(0x07)</span><br>
-    Limits used by the app: path max <span class="mono">127 UTF-8 bytes</span>, content max <span class="mono">511 UTF-8 bytes</span>, host id <span class="mono">0x00</span>, broadcast id <span class="mono">0xFF</span>.<br>
+    Limits used by the app: path max <span class="mono">127 UTF-8 bytes</span>, content max <span class="mono">2047 UTF-8 bytes</span>, host id <span class="mono">0x00</span>, broadcast id <span class="mono">0xFF</span>.<br>
     This page is synchronized to the WinUI3 software implementation, not the reference firmware C sources.
   </div>
   <div class="section-note">
@@ -719,7 +719,7 @@ FF = tar_id (broadcast)
             <li>요청 payload는 <span class="mono">path_len(2 LE) + path(path_len)</span> 입니다.</li>
             <li>응답 payload는 <span class="mono">path_len + path + content_len + content</span> 입니다.</li>
             <li>동일한 cmd 안에서 path 값만 바꿔 여러 설정 파일과 로그 파일을 읽습니다.</li>
-            <li>WinUI3 앱 검증 기준 path는 최대 <span class="mono">127 UTF-8 bytes</span>, content는 최대 <span class="mono">511 UTF-8 bytes</span> 입니다.</li>
+            <li>WinUI3 앱 검증 기준 path는 최대 <span class="mono">127 UTF-8 bytes</span>, content는 최대 <span class="mono">2047 UTF-8 bytes</span> 입니다.</li>
           </ul>
         </div>
 
@@ -738,7 +738,8 @@ FF = tar_id (broadcast)
           <h4>공통 처리 흐름</h4>
           <ul>
             <li>통신 레이어가 path 길이와 payload 길이 일치를 먼저 검사합니다.</li>
-            <li>path를 문자열로 복원한 뒤 <span class="mono">App_GetFile(path, out_content, max_len)</span> 을 호출합니다.</li>
+            <li>path를 문자열로 복원한 뒤 <span class="mono">App_GetFileSize(path)</span> 로 크기를 먼저 확인합니다. <span class="mono">APP_CONTENT_MAX_LEN</span>(2048) 이상이면 자르지 않고 <span class="mono">ERR_RESPONSE_TOO_LARGE</span> 를 보냅니다. 음수(크기 미상)면 이 검사를 건너뜁니다.</li>
+            <li>이어서 <span class="mono">App_GetFile(path, out_content, max_len)</span> 을 호출합니다.</li>
             <li>성공 시 path와 content를 함께 응답에 담고, 실패 시 <span class="mono">ERR_FILE_NOT_FOUND</span> 를 보냅니다.</li>
           </ul>
         </div>
@@ -792,7 +793,7 @@ Setting/DI_ID.TXT = path
             <li>요청 payload는 <span class="mono">path_len(2 LE) + path + content_len(2 LE) + content</span> 입니다.</li>
             <li>성공 응답 payload는 <span class="mono">path_len + path</span> 만 돌려줍니다.</li>
             <li>즉 응답은 "어떤 파일 저장을 수락했는가" 확인용입니다.</li>
-            <li>WinUI3 앱은 저장 전 path 최대 <span class="mono">127 UTF-8 bytes</span>, content 최대 <span class="mono">511 UTF-8 bytes</span> 를 검사합니다.</li>
+            <li>WinUI3 앱은 저장 전 path 최대 <span class="mono">127 UTF-8 bytes</span>, content 최대 <span class="mono">2047 UTF-8 bytes</span> 를 검사합니다.</li>
           </ul>
         </div>
 
@@ -864,7 +865,7 @@ Setting/MT_RP.TXT = path</code></pre>
             <li>요청 payload 구조는 <span class="mono">CMD_SAVE_FILE</span> 과 동일합니다.</li>
             <li>성공 응답 payload는 <span class="mono">path_len + path + match(1)</span> 입니다.</li>
             <li><span class="mono">match = 0x01</span> 이면 일치, <span class="mono">0x00</span> 이면 불일치입니다.</li>
-            <li>WinUI3 앱은 검증 전 path 최대 <span class="mono">127 UTF-8 bytes</span>, expected content 최대 <span class="mono">511 UTF-8 bytes</span> 를 검사합니다.</li>
+            <li>WinUI3 앱은 검증 전 path 최대 <span class="mono">127 UTF-8 bytes</span>, expected content 최대 <span class="mono">2047 UTF-8 bytes</span> 를 검사합니다.</li>
           </ul>
         </div>
 
@@ -1666,7 +1667,7 @@ bool App_Ping(void)
           <h4>app 코드가 해야 할 일</h4>
           <ul>
             <li>요청 path가 실제로 읽을 수 있는 파일인지 판단합니다.</li>
-            <li>파일 내용을 <span class="mono">max_len</span> 을 넘지 않게 버퍼에 복사하고 null 종료를 보장합니다.</li>
+            <li>파일 전체가 <span class="mono">max_len - 1</span> bytes 이하일 때만 버퍼에 복사하고 null 종료를 보장합니다. 넘으면 자르지 말고 false를 반환합니다.</li>
             <li>읽기 성공이면 true, 파일 없음 또는 읽기 실패면 false를 반환합니다.</li>
           </ul>
         </div>
@@ -1683,16 +1684,40 @@ bool App_Ping(void)
         <div class="function-block function-block-wide">
           <h4>레퍼런스 코드 조각</h4>
           <pre><code>/* 통신 레이어에서의 연결 */
-/* path를 문자열로 복원한 뒤 공통 읽기 함수로 전달 */
+/* path를 문자열로 복원한 뒤 크기 확인 → 공통 읽기 함수로 전달 */
+int32_t file_size = App_GetFileSize(path_buf);
+if (file_size &gt;= (int32_t)APP_CONTENT_MAX_LEN) {
+    SendErrorResponse(ctx, src_id, (uint8_t)CMD_GET_FILE,
+                      ERR_RESPONSE_TOO_LARGE, "File exceeds content buffer");
+    return;
+}
 bool ok = App_GetFile(path_buf, content_buf, APP_CONTENT_MAX_LEN);
 if (!ok) {
     SendErrorResponse(ctx, src_id, (uint8_t)CMD_GET_FILE, ERR_FILE_NOT_FOUND, NULL);
 }</code></pre>
           <pre><code>/* app 레이어 구현 예시 */
+int32_t App_GetFileSize(const char *path)
+{
+    FILINFO fno;
+    if (f_stat(path, &amp;fno) != FR_OK) {
+        return -1;  /* 크기 미상: 통신 레이어가 크기 검사를 건너뜀 */
+    }
+    /* 2 GiB 이상 파일이 음수(크기 미상)로 바뀌지 않게 상한 고정 */
+    return (fno.fsize &gt; (FSIZE_t)INT32_MAX) ? INT32_MAX : (int32_t)fno.fsize;
+}
+
 bool App_GetFile(const char *path, char *out_content, uint16_t max_len)
 {
-    /* max_len 범위 안에서 텍스트 파일을 읽고 null 종료 보장 */
-    return SD_ReadFile(path, out_content, max_len) == 0;
+    FILINFO fno;
+    /* null 자리까지 담을 수 없으면 자르지 말고 실패 */
+    if (f_stat(path, &amp;fno) != FR_OK || fno.fsize &gt;= max_len) {
+        return false;
+    }
+    if (SD_ReadFile(path, out_content, max_len) != 0) {
+        return false;
+    }
+    out_content[fno.fsize] = '\0';
+    return true;
 }</code></pre>
         </div>
       </div>
@@ -1827,15 +1852,25 @@ if (ok) {
           <pre><code>/* app 레이어 구현 예시 */
 bool App_VerifyFile(const char *path, const char *content, bool *out_match)
 {
-    char buffer[APP_CONTENT_MAX_LEN];
+    static char buffer[APP_CONTENT_MAX_LEN];  /* 2KB는 스택 대신 static */
+    FILINFO fno;
 
     /* 먼저 실제 파일을 읽을 수 있어야 검증 가능 */
+    if (f_stat(path, &amp;fno) != FR_OK) {
+        return false;
+    }
+
+    /* 크기부터 비교: 버퍼에 다 담기지 않는 파일은 잘린 앞부분끼리 일치할 수 있음 */
+    if (fno.fsize &gt;= sizeof(buffer) || fno.fsize != strlen(content)) {
+        *out_match = false;
+        return true;
+    }
     if (SD_ReadFile(path, buffer, sizeof(buffer)) != 0) {
         return false;
     }
 
     /* 읽은 원문과 기대 문자열이 같은지 비교 */
-    *out_match = (strcmp(buffer, content) == 0);
+    *out_match = (memcmp(buffer, content, fno.fsize) == 0);
     return true;
 }</code></pre>
         </div>

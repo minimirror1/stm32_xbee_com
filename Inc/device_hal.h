@@ -29,7 +29,7 @@
  ******************************************************************************/
 #define APP_NAME_MAX_LEN      64
 #define APP_PATH_MAX_LEN      128
-#define APP_CONTENT_MAX_LEN   512
+#define APP_CONTENT_MAX_LEN   2048  /* File content incl. NUL (max 2047 B); frame limit allows <= 3960 */
 #define APP_MAX_FILES         64    /* Maximum files returned by App_GetFiles */
 #define APP_MAX_DEPTH         10    /* Maximum folder depth (0=root, 1, 2, ... 9) */
 #define APP_MAX_MOTORS        32    /* Maximum motors */
@@ -317,6 +317,10 @@ bool App_ErrorClear(void);
  * @param max_count Maximum number of files to return
  * @return Number of files (>= 0) on success, -1 on failure
  *
+ * @note size must be the real file size from the directory entry, never the
+ *       number of bytes read or a buffer size. The host detects truncated
+ *       reads by comparing it with the received content length.
+ *
  * @example
  *   int App_GetFiles(AppFileInfo *out_files, uint16_t max_count) {
  *       int count = 0;
@@ -334,16 +338,50 @@ int App_GetFiles(AppFileInfo *out_files, uint16_t max_count);
 /**
  * @brief Read file content
  * @param path File path to read
- * @param out_content Output buffer for file content
- * @param max_len Maximum buffer size
+ * @param out_content Output buffer for file content (must be NUL-terminated)
+ * @param max_len Buffer size including the NUL (APP_CONTENT_MAX_LEN)
  * @return true on success, false on failure
+ *
+ * @note Never truncate. If the file size is max_len or more (no room for the
+ *       NUL), return false instead of a partial file.
  *
  * @example
  *   bool App_GetFile(const char *path, char *out_content, uint16_t max_len) {
- *       return SD_ReadFile(path, out_content, max_len) == 0;
+ *       FILINFO fno;
+ *       if (f_stat(path, &fno) != FR_OK || fno.fsize >= max_len) {
+ *           return false;  // Missing, or would be truncated
+ *       }
+ *       if (SD_ReadFile(path, out_content, max_len) != 0) {
+ *           return false;
+ *       }
+ *       out_content[fno.fsize] = '\0';
+ *       return true;
  *   }
  */
 bool App_GetFile(const char *path, char *out_content, uint16_t max_len);
+
+/**
+ * @brief Get the actual size of a file on storage
+ * @param path File path
+ * @return File size in bytes (>= 0), or -1 if unknown/not supported
+ *
+ * @note CMD_GET_FILE calls this before App_GetFile. A file that does not fit
+ *       APP_CONTENT_MAX_LEN (NUL included) is answered with
+ *       ERR_RESPONSE_TOO_LARGE instead of silently truncated content.
+ *       A negative value skips that check, so the weak default (-1) leaves
+ *       the protection off until this function is overridden.
+ *
+ * @example
+ *   int32_t App_GetFileSize(const char *path) {
+ *       FILINFO fno;
+ *       if (f_stat(path, &fno) != FR_OK) {
+ *           return -1;
+ *       }
+ *       // Clamp: a >= 2 GiB file must not wrap to a negative "unknown"
+ *       return (fno.fsize > (FSIZE_t)INT32_MAX) ? INT32_MAX : (int32_t)fno.fsize;
+ *   }
+ */
+int32_t App_GetFileSize(const char *path);
 
 /**
  * @brief Save content to file
@@ -365,13 +403,24 @@ bool App_SaveFile(const char *path, const char *content);
  * @param out_match Output: true if content matches, false otherwise
  * @return true on success (verification performed), false on failure (couldn't read file)
  *
+ * @note Compare sizes first. A file too big for the buffer must report
+ *       out_match = false, never a match of its truncated head.
+ *
  * @example
  *   bool App_VerifyFile(const char *path, const char *content, bool *out_match) {
- *       char buffer[512];
+ *       static char buffer[APP_CONTENT_MAX_LEN];  // static: keep 2 KB off the stack
+ *       FILINFO fno;
+ *       if (f_stat(path, &fno) != FR_OK) {
+ *           return false;  // Couldn't read file
+ *       }
+ *       if (fno.fsize >= sizeof(buffer) || fno.fsize != strlen(content)) {
+ *           *out_match = false;
+ *           return true;
+ *       }
  *       if (SD_ReadFile(path, buffer, sizeof(buffer)) != 0) {
  *           return false;  // Couldn't read file
  *       }
- *       *out_match = (strcmp(buffer, content) == 0);
+ *       *out_match = (memcmp(buffer, content, fno.fsize) == 0);
  *       return true;
  *   }
  */
